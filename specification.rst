@@ -25,8 +25,65 @@ files defining the individual flake members.
 flake.nix
 ===========
 The `flake.nix` file describes the flake being defined, including
-metadata and enumerating its members. It defines a `Nix` expression
-evaluating to an attribute set with the following keys and values:
+metadata and enumerating its members. Here is an example illustrating
+the format:
+
+.. code-block:: nix
+
+   {
+     metadata = {
+       name = "flake-example";
+
+       version = { major = 1; patch = 1; }; # i.e. semver 1.0.1
+
+       description = "A fake flake to illustrate flake.nix";
+     };
+
+     dependencies = {
+       foo = {
+         good-versions = [ { major = 2; minor = 1; } ];
+
+         bad-version-ranges = [ { upper-bound = {
+           version.major = 2;
+
+           included = false;
+         } } ];
+
+         # So, we depend on "foo", we know that versions prior to
+         # 2.0.0 won't work, and we expect 2.1.x and higher (but
+         # lower than 3.x) will work, but we're not sure about 2.0
+         # or anything 3.x or higher.
+       };
+
+       foo-legacy = {
+         name = "foo";
+
+         good-versions = [ { major = 1; } ];
+
+         bad-version-ranges = [ { lower-bound = {
+           version.major = 2;
+
+           included = true;
+         } } ];
+
+         # One of our modules still depends on the old version of
+         # foo, which we name locally foo-legacy.
+       };
+     };
+
+     members = {
+       top-level = ./src/default.nix;
+
+       named = {
+         some-member = ./src/some.nix;
+       };
+     };
+
+     flake-specification-version.major = 0;
+   }
+
+`flake.nix` should define a `Nix` expression evaluating to an
+attribute set with the following keys and values:
 
 metadata
 ---------
