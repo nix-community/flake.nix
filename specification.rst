@@ -18,7 +18,7 @@ Introduction
 This specification formalizes the technical interface for `Nix`
 flakes. It includes of formats and semantics for flake.nix_,
 describing the metadata and members of the flakes, and for
-flake.lock, a "lock file" pinning the flake's dependencies for a
+flake.lock_, a "lock file" pinning the flake's dependencies for a
 particular evaluation. It also defines the format and semantics of the
 files defining the individual flake members.
 
@@ -227,3 +227,115 @@ flake-specification-version
 This key is required. Its value specifies the version of the flake
 specification the `flake.nix` was written to conform to, represented
 as a `version set`_.
+
+flake.lock
+===========
+The `flake.lock` file specifies the exact source of dependencies to be
+used for a particular evaluation. It can also be named
+`flake.lock.local`, in which case it takes precedence over
+`flake.lock` (this is intended to allow for easy overriding in local
+development while ensuring VCS-aware files don't accidentally refer to
+local checkouts or WIP versions). Here is an example illustrating the
+format, corresponding to the example for flake.nix_:
+
+.. code-block:: nix
+
+   {
+     foo.source.git = {
+       url = "https://github.com/NixOS/foo.git";
+
+       ref.tag = "2.1.0";
+     };
+
+     # Maybe in some beautiful future we have a flake package
+     # repository called flurry, where we could have:
+     #   foo.source.flurry = { name = "foo"; version = "2.1.0"; }
+     # or similar
+
+     # foo depends on bar, we actually carry a local version with some
+     # patches upstream hasn't merged yet
+     bar.source.path = ./vendor/bar;
+
+     foo-legacy = {
+       source.git = {
+         url = "https://github.com/NixOS/foo.git";
+
+         ref.tag = "1.3.0";
+       };
+
+       # foo-legacy needs an older version of bar
+       dependencies.bar.source.git = {
+         url = "https://github.com/NixOS/bar.git";
+
+         ref.tag = "1.5.1";
+       };
+     };
+   }
+
+`flake.lock` should define a `Nix` expression evaluating to an
+attribute set. The attribute names correspond to the `local names` of
+dependencies of this flake and/or its dependencies, recursively. For a
+given evaluation, *only* the top-level `flake.lock` is respected, any
+`flake.lock` files in fetched dependencies are ignored, so *all*
+recursive dependencies must be specified in the top-level file. The
+attribute values should be attribute sets with the following keys:
+
+source
+---------
+
+This attribute is required. Its value represents a full specification
+of where the dependency comes from, represented as an attribute set
+with a single attribute from the following list:
+
+path
+  The source comes from a specific path on the local filesystem.
+
+git
+  The source comes from a git repository. In this case, the attribute
+  value has the following fields:
+
+  url
+    This attribute is required. Its value is the URL of the git
+    repository.
+
+  ref
+    This attribute is required. Its value represents the git ref
+    corresponding to the specific commit to pull as an attribute set
+    with a single attribute from the following list:
+
+    tag
+      The ref is a git tag. Tags, assumed to be immutable, can be
+      pulled without specifying a particular commit.
+
+    revision
+      The ref is a specific git revision, represented as an attribute
+      set with the following attributes:
+
+      commit
+        This attribute is required. The full git hash of the commit
+        object in question.
+
+      head
+        This attribute is optional. The head of the remote repository
+        to find the commit on. If omitted, this defaults to the git
+        defaults for `remote.origin.fetch`, i.e.
+        `+refs/heads/*:refs/remotes/origin/*`.
+
+dependencies
+-------------
+
+..  WARNING::
+    Specifying this attribute without care can lead to incoherencies
+    in the dependency graph that may be very difficult to debug.
+
+This attribute is optional. Normally, dependencies of dependencies are
+simply pulled from the top level of the attribute set defined in the
+`flake.lock`. This ensures a level of coherence across all of the
+flakes within a given evaluation, reducing the chances of mismatched
+types or functions between sibling flakes and limiting the amount of
+duplicate code fetched. In some cases, however, it is necessary to
+override recursive dependencies specifically for some dependency. In
+that case, the `dependencies` attribute, with the same format as the
+`flake.lock` file as a whole, can be used. Any dependencies defined in
+`dependencies` override dependencies from the top-level set for the
+given dependency and any of its (recursive) dependencies.
