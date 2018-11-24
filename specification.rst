@@ -20,7 +20,9 @@ flakes. It includes of formats and semantics for flake.nix_,
 describing the metadata and members of the flakes, and for
 flake.lock_, a "lock file" pinning the flake's dependencies for a
 particular evaluation. It also defines the format and semantics of the
-files defining the individual flake members.
+files defining the individual `flake members`_.
+
+.. _flake members: `Member interface`_
 
 flake.nix
 ===========
@@ -339,3 +341,63 @@ that case, the `dependencies` attribute, with the same format as the
 `flake.lock` file as a whole, can be used. Any dependencies defined in
 `dependencies` override dependencies from the top-level set for the
 given dependency and any of its (recursive) dependencies.
+
+Member interface
+=================
+Individual flake members are defined in `Nix` expressions specified in
+`flake.nix`. Here is an example illustrating the format, corresponding
+to the example for flake.nix_:
+
+.. code-block:: nix
+
+   get-flake-member: let
+     # Get the top-level member of "foo"
+     foo = get-flake-member { flake = "foo"; };
+     inherit (foo) make-foo;
+
+     # Get the "utils" member of the old version of "foo" which we
+     # locally named "foo-legacy".
+     foo-utils-legacy = get-flake-member {
+       flake = "foo-legacy";
+
+       member = "utils";
+     };
+     inherit (foo-utils-legacy) frobnicate-foos;
+
+     # We can even get other members of this flake
+     some-member = get-flake-member { member = "some-member"; };
+     inherit (some-member) foo-name;
+
+     # This would be an error! We didn't list bar in our dependencies,
+     # even though it is in our lock file
+     # bar = get-flake-member { flake = "bar"; };
+   in {
+     # Note that this member body doesn't follow best practices, it
+     # should be more structured than this. But those best practices
+     # aren't formalized yet and this shows the technical interface.
+     my-frobnicated-foo = builtins.head (frobnicate-foos [
+       (make-foo { name = foo-name; })
+     ];
+   }
+
+Each flake member should define a function taking some function as its
+argument and returning an arbitrary `Nix` value. The passed in
+function gives access to other members within the same flake as well
+as members of flakes in the dependency list. It takes as a single
+argument a set with the following attributes:
+
+flake
+  This attribute is optional. If provided, it corresponds to the
+  `local name` of the dependency to pull the member from. The flake
+  must be explicitly listed in the dependency list. If omitted, the
+  member is pulled from the same flake as the member being defined.
+
+member
+  This attribute is optional. If provided, it is the name of the
+  member to pull in. If ommitted, the top-level member is is used.
+
+If the specified flake doesn't exist or isn't in the dependency list,
+or the flake exists but doesn't have the specified member, the
+function throws an error. Otherwise, it returns the result of
+importing the file corresponding to that flake member and passing it
+the appropriate function to resolve *its* dependencies.
